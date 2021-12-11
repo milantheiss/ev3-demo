@@ -10,6 +10,6 @@ Mitgewirkt an diesem Projekt haben:
 - [Noah Yannik Alps](https://github.com/Noah-Alps) - Radar Application, Bau
 - [Max Meinel](https://github.com/Max-Meinel) - Discord Bot, Bau
 - [Leonhard Wegers](https://github.com/leonhard2004) - Bau
-*** 
+---
 Für die Steuerung des EV3 mit einem XBox Controller wurde Quellcode von Github User [hugbug](https://github.com/hugbug/ev3/tree/master/gidd3) adaptiert.  
 Für die Server und Clients wurde Quellcode von [RealPython](https://realpython.com/python-sockets/)
