@@ -109,7 +109,7 @@ if __name__ == "__main__":
     async def post_github(ctx):
         embed = discord.Embed(title="GitHub Projekt",
                               description="Ihr findet allen Quellcode in diesem GitHub Repository "
-                                          "\n**https://github.com/milantheiss/**", color=0x0998c8)
+                                          "\n**https://github.com/milantheiss/ev3-demo**", color=0x0998c8)
         await ctx.send(embed=embed)
 
 
