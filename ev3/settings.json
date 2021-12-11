@@ -1,0 +1,5 @@
+{
+  "platform": "ev3",
+  "host-ip": "127.0.0.1",
+  "host-port": "1238"
+}
