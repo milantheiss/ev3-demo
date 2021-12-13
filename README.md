@@ -6,7 +6,7 @@ Auf dem Roboter läuft ev3dev-stretch.
 Aller Quellcode in diesem Repository wurde in Python verfasst  
 und benutzt die [ev3dev2 Python Library](https://github.com/ev3dev/ev3dev-lang-python).
 
-***  
+<hr style="border:1px solid gray"> </hr>
 Mitgewirkt an diesem Projekt haben:  
 - [Milan Theiß](https://github.com/milantheiss) - EV3 Programmierung, Backend, Discord Bot
 - [Noah Yannik Alps](https://github.com/Noah-Alps) - Radar Application, Bau
