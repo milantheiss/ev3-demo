@@ -9,8 +9,8 @@ import io
 import struct
 
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(threadName)s %(name)s %(message)s")
-logger = logging.getLogger('RADAR APP CLIENT')
-logger.setLevel(logging.DEBUG)
+logger = logging.getLogger('PI CLIENT')
+logger.setLevel(logging.INFO)
 
 
 def _create_request_message(methode, parameter):
@@ -21,8 +21,7 @@ def _create_request_message(methode, parameter):
     )
 
 
-class RadarAppClient:
-
+class PiClient:
     settings = None
     host = None
     port = None
@@ -30,13 +29,15 @@ class RadarAppClient:
     def send_server_request(self, methode, parameter):
         sel = selectors.DefaultSelector()
         address = (self.host, self.port)
-        logger.info("Starting connection to %s", address)
+        logger.debug("Starting connection to %s", address)
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setblocking(False)
         sock.connect_ex(address)
         events = selectors.EVENT_READ | selectors.EVENT_WRITE
         request = _create_request_message(methode, parameter)
-        message = Message(sel, sock, address, request, self.radar_app_controller)
+        if parameter != "distance_data":
+            logger.info("Send %s | %s", methode, parameter)
+        message = Message(sel, sock, address, request, self.pi_controller)
         sel.register(sock, events, data=message)
 
         try:
@@ -57,17 +58,17 @@ class RadarAppClient:
         finally:
             sel.close()
 
-    def __init__(self, radar_app_controller):
-        self.radar_app_controller = radar_app_controller
+    def __init__(self, pi_controller):
+        self.pi_controller = pi_controller
 
         with open("settings.json") as file:
             self.settings = json.load(file)
 
-        self.host, self.port = self.settings["host-ip"], int(self.settings["host-port"])
+        self.host, self.port = self.settings["client"]["host-ip"], int(self.settings["client"]["host-port"])
 
 
 class Message:
-    def __init__(self, selector, sock, addr, request, radar_app_controller):
+    def __init__(self, selector, sock, addr, request, pi_controller):
         self.selector = selector
         self.sock = sock
         self.addr = addr
@@ -78,8 +79,7 @@ class Message:
         self._jsonheader_len = None
         self.jsonheader = None
         self.response = None
-        self.radar_app_controller = radar_app_controller
-
+        self.pi_controller = pi_controller
 
     def _set_selector_events_mask(self, mode):
         """Set selector to listen for events: mode is 'r', 'w', or 'rw'."""
@@ -110,7 +110,7 @@ class Message:
 
     def _write(self):
         if self._send_buffer:
-            logger.info("Sending %s to %s", repr(self._send_buffer), self.addr)
+            logger.debug("Sending %s to %s", repr(self._send_buffer), self.addr)
             try:
                 # Should be ready to write
                 sent = self.sock.send(self._send_buffer)
@@ -148,10 +148,9 @@ class Message:
 
     def _process_response_json_content(self):
         if self.response.get("methode") == "RESPONSE":
-            logger.info("Received Response: Methode: %s; Description: %s; Value: %s", self.response.get("methode"),
+            logger.debug("Received Response: Methode: %s; Description: %s; Value: %s", self.response.get("methode"),
                         self.response.get("description"), self.response.get("value"))
-            self.radar_app_controller.process_response(self.response)
-
+        self.pi_controller.process_response(self.response)
 
     def process_events(self, mask):
         if mask & selectors.EVENT_READ:
@@ -186,7 +185,7 @@ class Message:
                 self._set_selector_events_mask("r")
 
     def close(self):
-        logger.info("Closing connection to %s", self.addr)
+        logger.debug("Closing connection to %s", self.addr)
         try:
             self.selector.unregister(self.sock)
         except Exception as e:
@@ -256,4 +255,3 @@ class Message:
             self._process_response_json_content()
         # Close when response has been processed
         self.close()
-        print()

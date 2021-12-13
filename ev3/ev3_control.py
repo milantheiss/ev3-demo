@@ -1,61 +1,84 @@
 #!/usr/bin/env python3
-
+import json
 import logging
 import threading
 from time import sleep
-from ev3dev2.motor import Motor, MoveJoystick
-from ev3dev2.sound import Sound
-from gamepad_util import Gamepad, GamepadHandler
 
-logging.basicConfig(level=logging.DEBUG)
+from ev3dev2.motor import Motor, MoveJoystick, MoveTank
+from ev3dev2.sensor.lego import UltrasonicSensor
+import ev3_server
 
-spkr = Sound()
+from gamepad_util import Gamepad, GamepadHandler, limit_input_percentage
 
-test = GamepadHandler(Gamepad())
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(threadName)s %(name)s %(message)s")
+logger = logging.getLogger('EV3 CONTROLLER')
+logger.setLevel(logging.DEBUG)
+
+gamepad = GamepadHandler(Gamepad())
 
 motors = MoveJoystick("outD", "outA")
+movetank = MoveTank("outD", "outA")
+
 motorD = Motor("outD")
 motorA = Motor("outA")
 
-playing_sound = False
-
-
-def play_sound_file(filepath):
-    global playing_sound
-
-    def _play_sound(filepath):
-        global playing_sound
-        logging.info("Playing %s", filepath)
-        spkr.play_file(wav_file=filepath, play_type=0)
-        playing_sound = False
-
-    if (playing_sound is False):
-        playing_sound = True
-        threading.Thread(target=_play_sound, args=(filepath,)).start()
-    else:
-        logging.error("Sound file will not be played: EV3 is already playing a sound file.")
-
 
 def action_left_stick():
-    if (motorA.speed != 0 or motorD.speed != 0):
-        logging.info("Motor A %d Motor D %d", motorA.speed, motorD.speed)
-    motors.on(test.limit_input_percentage(test.connected_gamepad.LEFT_STICK_X, 70),
-              test.limit_input_percentage((test.connected_gamepad.LEFT_STICK_Y * -1), 70))
+    motors.on(limit_input_percentage(gamepad.connected_gamepad.LEFT_STICK_X, 70),
+              limit_input_percentage((gamepad.connected_gamepad.LEFT_STICK_Y * -1), 70))
 
 
-def _on_press_button_x():
-    play_sound_file("sounds/doyouknowthewae.wav")
+class EV3Controller:
+    ultrasonicsensor = UltrasonicSensor("in1")
 
+    def __init__(self):
+        self.ev3_server = ev3_server.EV3ControlServer(self)
+        self._response = None
+        self._command = None
+        self._distance_data = None
+        threading.Thread(target=self.ev3_server.start_server).start()
+        with open("settings.json") as file:
+            self._rotation_ratio = json.load(file).get("rotation-ratio")
 
-def main():
-    logging.debug("Use Controller to start input handling")
-    test.connected_gamepad.start_reading_inputs()
-    while not test.connected_gamepad.checking_for_inputs:
-        sleep(1)
+    def process_request(self, request):
 
-    test.handle_onpress_events(onpress_button_x=_on_press_button_x)
-    test.handle_stick_outputs(action_left_stick=action_left_stick)
+        logger.info("Processing Request: %s", request)
+        if request.get("methode") == "GET":
+            if request.get("parameter") == "distance_data":
+                self._response = dict(methode="RESPONSE", description="distance_data",
+                                      value=str(self.ultrasonicsensor.distance_centimeters))
+                logger.info("Processed Request. Response is: %s", self._response)
+        if request.get("methode") == "POST":
+            if request.get("parameter").get("command") == "forwards":
+                timeout = int(request.get("parameter").get("timeout"))
+                speed = int(request.get("parameter").get("speed"))
+                movetank.on_for_seconds(speed, speed, timeout)
+                self._response = dict(methode="RESPONSE", description="CONFIRMATION")
+            elif request.get("parameter").get("command") == "backwards":
+                timeout = int(request.get("parameter").get("timeout"))
+                speed = int(request.get("parameter").get("speed")) * -1
+                movetank.on_for_seconds(speed, speed, timeout)
+                self._response = dict(methode="RESPONSE", description="CONFIRMATION")
+            elif request.get("parameter").get("command") == "rotate":
+                degrees = int(request.get("parameter").get("degrees"))
+                corrected = degrees * self._rotation_ratio
+                logger.info("%s ROTATIONS", corrected)
+                movetank.on_for_rotations(-70, 70, corrected)
+                self._response = dict(methode="RESPONSE", description="CONFIRMATION")
+
+    @property
+    def response(self):
+        logger.debug("Response %s", self._response)
+        return self._response
 
 
 if __name__ == '__main__':
-    main()
+    ev3_controller = EV3Controller()
+    logger.debug("Use Controller to start input handling")
+
+    gamepad.connected_gamepad.start_reading_inputs()
+    while not gamepad.connected_gamepad.checking_for_inputs:
+        sleep(1)
+
+    gamepad.handle_stick_outputs(action_left_stick=action_left_stick)
+    #Change checking for inputs to false to stop handleing --> bei Command

@@ -11,7 +11,8 @@ from pi_control import PiController
 
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(threadName)s %(name)s %(message)s")
 logger = logging.getLogger('PI SERVER')
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
+
 
 class PiControlServer:
     sel = selectors.DefaultSelector()
@@ -20,14 +21,15 @@ class PiControlServer:
 
     def _accept_wrapper(self, sock):
         conn, addr = sock.accept()  # Should be ready to read
-        logger.info("Server accepted connection from %s", addr)
+        logger.debug("Server accepted connection from %s", addr)
         conn.setblocking(False)
-        message = Message(self.sel, conn, addr, self.mission_controller)
+        message = Message(self.sel, conn, addr, self.pi_controller)
         self.sel.register(conn, selectors.EVENT_READ, data=message)
 
     def start_server(self):
         logger.info("Starting server...")
-        host, port = self.settings["host-ip"], int(self.settings["host-port"])
+        host, port = self.settings["server"]["host-ip"], int(self.settings["server"]["host-port"])
+        logger.debug("Host: %s Port: %s", host, port)
         self.lsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # Avoid bind() exception: OSError: [Errno 48] Address already in use
         self.lsock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -54,8 +56,8 @@ class PiControlServer:
         finally:
             self.sel.close()
 
-    def __init__(self, mission_controller):
-        self.mission_controller = mission_controller
+    def __init__(self, pi_controller):
+        self.pi_controller = pi_controller
 
         with open("settings.json") as file:
             self.settings = json.load(file)
@@ -105,8 +107,7 @@ class Message:
 
     def _write(self):
         if self._send_buffer:
-            logger.info("Sending response to %s", self.addr)
-            logger.debug("Sending %s to %s", repr(self._send_buffer), self.addr)
+            logger.debug("Sending response to %s", self.addr)
             try:
                 # Should be ready to write
                 sent = self.sock.send(self._send_buffer)
@@ -186,8 +187,7 @@ class Message:
         self._write()
 
     def close(self):
-        logger.info("Closing connection to %s", self.addr)
-        print()
+        logger.debug("Closing connection to %s", self.addr)
         try:
             self.selector.unregister(self.sock)
         except Exception as e:
@@ -204,7 +204,7 @@ class Message:
     def process_protoheader(self):
         hdrlen = 2
         if len(self._recv_buffer) >= hdrlen:
-            #logger.debug("Processing proto header")
+            # logger.debug("Processing proto header")
             self._jsonheader_len = struct.unpack(
                 ">H", self._recv_buffer[:hdrlen]
             )[0]
@@ -213,7 +213,7 @@ class Message:
     def process_jsonheader(self):
         hdrlen = self._jsonheader_len
         if len(self._recv_buffer) >= hdrlen:
-            #logger.debug("Processing JSON header")
+            # logger.debug("Processing JSON header")
             self.jsonheader = self._json_decode(
                 self._recv_buffer[:hdrlen], "utf-8"
             )
@@ -235,12 +235,12 @@ class Message:
         data = self._recv_buffer[:content_len]
         self._recv_buffer = self._recv_buffer[content_len:]
         if self.jsonheader["content-type"] == "text/json":
-            #logger.debug("Processing JSON Content")
+            # logger.debug("Processing JSON Content")
             encoding = self.jsonheader["content-encoding"]
             self.request = self._json_decode(data, encoding)
-            logger.info("Received request %s - %s from %s", repr(self.request.get("methode")),
-                        repr(self.request.get("parameter")), self.addr)
-            PiController.process_request(self.pi_controller, self.request)
+            logger.debug("Received request %s - %s from %s", repr(self.request.get("methode")),
+                         repr(self.request.get("parameter")), self.addr)
+            self.pi_controller.process_request(self.request)
         else:
             # Binary or unknown content-type
             logging.error("Server only accepts JSON")

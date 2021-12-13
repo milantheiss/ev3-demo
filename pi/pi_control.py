@@ -2,40 +2,62 @@
 import logging
 import threading
 import os
+from time import sleep
+
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 import pi_server
+import pi_client
 
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(threadName)s %(name)s %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(threadName)s %(name)s %(message)s")
 logger = logging.getLogger('PI CONTROLLER')
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 
 class PiController:
     _response = None
     _command = None
     _distance_data = None
-
-    def __init__(self):
-        logger.error("TEST ERROR")
-        self.pi_server = pi_server.PiControlServer(self)
-        logger.debug("Server created. Going to start server %s", "TEST")
-        self._distance_data = "0"
-        threading.Thread(target=self.start_server).start()
-
-    def start_server(self):
-        threading.Thread(target=self.pi_server.start_server).start()
+    _request_queue = []
 
     def process_request(self, request):
         if request.get("methode") == "GET":
             if request.get("parameter") == "distance_data":
-                self._response = self._response = dict(methode="RESPONSE", description="distance data",
-                                                       value=self.distance_data)
-                self._distance_data = int(self._distance_data) + 20
+                self._response = dict(methode="RESPONSE", description="distance_data",
+                                      value=str(self.distance_data))
         else:
             logger.info("Default response message send")
             self._response = dict(methode="ERROR", parameter="Unknown Methode")
+
+    def process_response(self, response):
+        if response.get("methode") == "RESPONSE":
+            if response.get("description") == "distance_data":
+                try:
+                    self.distance_data = round(float(response.get("value")))
+                    self.queue_get_distance_data()
+                    self._response_received = True
+                except ValueError:
+                    logger.error("Error while casting response into int. Current value of distance data: %s",
+                                 self._distance_data)
+            elif response.get("description") == "CONFIRMATION":
+                logger.info("EV3 has received to command.")
+                self._response_received = True
+
+    def add_request_to_queue(self, methode, parameter):
+        self._request_queue.append(dict(methode=methode, parameter=parameter))
+
+    def start_requesting(self):
+        def _start_requesting(self):
+            while True:
+                self._response_received = False
+                _request = self._request_queue.pop(0)
+                self.pi_client.send_server_request(_request.get("methode"), _request.get("parameter"))
+                sleep(1)
+                while self._response_received is False:
+                    sleep(1)
+
+        threading.Thread(target=_start_requesting, args=(self,)).start()
 
     @property
     def response(self):
@@ -48,11 +70,29 @@ class PiController:
 
     @distance_data.setter
     def distance_data(self, distance_data):
-        if distance_data is isinstance(int):
+        if isinstance(self._distance_data, int):
             logger.debug("New distance data set")
             self._distance_data = distance_data
         else:
             logger.error("New distance data not set. Data not instance of int")
+
+    def queue_get_distance_data(self):
+        def _queue_get_distance_data(self):
+            sleep(0.5)
+            self.add_request_to_queue("GET", "distance_data")
+
+        threading.Thread(target=_queue_get_distance_data, args=(self,), daemon=True).start()
+
+    def __init__(self):
+        self.pi_server = pi_server.PiControlServer(self)
+        self.pi_client = pi_client.PiClient(self)
+        self._response_received = False
+        logger.debug("Server created. Going to start server")
+        self._distance_data = 0
+        threading.Thread(target=self.pi_server.start_server).start()
+        self.add_request_to_queue("GET", "distance_data")
+        self.start_requesting()
+        self.queue_get_distance_data()
 
 
 if __name__ == "__main__":
@@ -66,7 +106,7 @@ if __name__ == "__main__":
 
     intents = discord.Intents.default()
     intents.members = True
-    bot = commands.Bot(intents=intents, command_prefix=["eve ", "EVE "])
+    bot = commands.Bot(intents=intents, command_prefix=["eve ", "EVE "], help_command=None)
 
 
     @bot.event
@@ -87,14 +127,13 @@ if __name__ == "__main__":
 
 
     @bot.command(name='ping')
-    async def _ping(ctx, args):
-        await ctx.send(f'pong {args}')
+    async def _ping(ctx):
+        await ctx.send('pong')
 
 
     @bot.command(name="mitwirkende")
     async def post_credits(ctx):
         embed_var = discord.Embed(title="Mitwirkende", color=0x0998c8)
-        embed_var.add_field(name="Project Lead", value="<@252817187247620097>", inline=False)
         embed_var.add_field(name="EV3 Programmierung", value="<@252817187247620097>", inline=False)
         embed_var.add_field(name="Backend", value="<@252817187247620097>", inline=False)
         embed_var.add_field(name="Radar App", value="<@409660466617516033>", inline=False)
@@ -110,6 +149,69 @@ if __name__ == "__main__":
         embed = discord.Embed(title="GitHub Projekt",
                               description="Ihr findet allen Quellcode in diesem GitHub Repository "
                                           "\n**https://github.com/milantheiss/ev3-demo**", color=0x0998c8)
+        await ctx.send(embed=embed)
+
+
+    @bot.command(name="vor")
+    async def move_forwards(ctx, timeout, speed):
+        embed = discord.Embed(title="Bewegungsbefehl",
+                              description=f"WALL·E bewegt sich jetzt {timeout} Sekunden mit {speed}% seine Max "
+                                          f"Geschwindigkeit vorwärts.", color=0x0998c8)
+        if pi_controller.distance_data <= 200:
+            embed.add_field(name="Distance Data",
+                            value=f"WALL·E meldet Momentan ein Objekt {pi_controller.distance_data} cm vor ihm")
+        else:
+            embed.add_field(name="Distance Data", value=f"WALL·E meldet Momentan kein Objekt vor ihm")
+        pi_controller.add_request_to_queue("POST", dict(command="forwards", timeout=timeout, speed=speed))
+        await ctx.send(embed=embed)
+
+
+    @bot.command(name="zurück")
+    async def move_backwards(ctx, timeout, speed):
+        embed = discord.Embed(title="Bewegungsbefehl",
+                              description=f"WALL·E bewegt sich jetzt {timeout} Sekunden mit {speed}% seine Max "
+                                          f"Geschwindigkeit rückwärts.", color=0x0998c8)
+        if pi_controller.distance_data <= 200:
+            embed.add_field(name="Distance Data",
+                            value=f"WALL·E meldet Momentan ein Objekt {pi_controller.distance_data} cm vor ihm")
+        else:
+            embed.add_field(name="Distance Data", value=f"WALL·E meldet Momentan kein Objekt vor ihm")
+        pi_controller.add_request_to_queue("POST", dict(command="backwards", timeout=timeout, speed=speed))
+        await ctx.send(embed=embed)
+
+
+    @bot.command(name="drehen")
+    async def rotate_for(ctx, degrees):
+        degrees = int(degrees)
+        if degrees < 0:
+            if (abs(degrees) / 360) > 1:
+                degrees = abs(degrees) % 360 * -1
+        else:
+            if (degrees / 360) > 1:
+                degrees = degrees % 360
+        embed = discord.Embed(title="Bewegungsbefehl",
+                              description=f"WALL·E dreht sich jetzt um {degrees}°", color=0x0998c8)
+        if pi_controller.distance_data <= 200:
+            embed.add_field(name="Distance Data",
+                            value=f"WALL·E meldet Momentan ein Objekt {pi_controller.distance_data} cm vor ihm")
+        else:
+            embed.add_field(name="Distance Data", value=f"WALL·E meldet Momentan kein Objekt vor ihm")
+        pi_controller.add_request_to_queue("POST", dict(command="rotate", degrees=degrees))
+        await ctx.send(embed=embed)
+
+
+    @bot.command("help")
+    async def send_help(ctx):
+        embed = discord.Embed(title="Help", color=0x097dc8)
+        embed.add_field(name="`eve vor [Zeit] [Geschwindigkeit]`", value="Zeit in Sekunden, Geschwindigkeit in %",
+                        inline=False)
+        embed.add_field(name="`eve zurück [Zeit] [Geschwindigkeit]`", value="Zeit in Sekunden, Geschwindigkeit in %",
+                        inline=False)
+        embed.add_field(name="`eve drehen [Drehung]`",
+                        value="Drehung in Grad (positiv links drehung / negativ rechtsdrehung)", inline=False)
+        embed.add_field(name="`eve mitwirkende`", value="zeigt die Credits", inline=False)
+        embed.add_field(name="`eve github`", value="Link zum Source Code", inline=False)
+        embed.add_field(name="`eve help`", value="Liste der Befehle", inline=False)
         await ctx.send(embed=embed)
 
 

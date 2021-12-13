@@ -13,6 +13,7 @@ logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(thr
 logger = logging.getLogger('EV3 SERVER')
 logger.setLevel(logging.DEBUG)
 
+
 class EV3ControlServer:
     sel = selectors.DefaultSelector()
     settings = None
@@ -20,9 +21,9 @@ class EV3ControlServer:
 
     def _accept_wrapper(self, sock):
         conn, addr = sock.accept()  # Should be ready to read
-        logger.info("Server accepted connection from", addr)
+        logger.info("Server accepted connection from %s", addr)
         conn.setblocking(False)
-        message = Message(self.sel, conn, addr, self.mission_controller)
+        message = Message(self.sel, conn, addr, self.ev3_controller)
         self.sel.register(conn, selectors.EVENT_READ, data=message)
 
     def start_server(self):
@@ -33,7 +34,7 @@ class EV3ControlServer:
         self.lsock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.lsock.bind((host, port))
         self.lsock.listen()
-        logger.info("Server is listening on", (host, port))
+        logger.info("Server is listening on %s", (host, port))
         self.lsock.setblocking(False)
         self.sel.register(self.lsock, selectors.EVENT_READ, data=None)
         try:
@@ -54,8 +55,8 @@ class EV3ControlServer:
         finally:
             self.sel.close()
 
-    def __init__(self, mission_controller):
-        self.mission_controller = mission_controller
+    def __init__(self, ev3_controller):
+        self.ev3_controller = ev3_controller
 
         with open("settings.json") as file:
             self.settings = json.load(file)
@@ -65,7 +66,7 @@ class EV3ControlServer:
 
 class Message:
 
-    def __init__(self, selector, sock, addr, mission_controller):
+    def __init__(self, selector, sock, addr, ev3_controller):
         self.selector = selector
         self.sock = sock
         self.addr = addr
@@ -75,7 +76,7 @@ class Message:
         self.jsonheader = None
         self.request = None
         self.response_created = False
-        self.mission_controller = mission_controller
+        self.ev3_controller = ev3_controller
 
     def _set_selector_events_mask(self, mode):
         """Set selector to listen for events: mode is 'r', 'w', or 'rw'."""
@@ -86,7 +87,7 @@ class Message:
         elif mode == "rw":
             events = selectors.EVENT_READ | selectors.EVENT_WRITE
         else:
-            raise ValueError(f"Invalid events mask mode {repr(mode)}.")
+            logger.error("ValueError: Invalid events mask mode.")
         self.selector.modify(self.sock, events, data=self)
 
     def _read(self):
@@ -105,7 +106,8 @@ class Message:
 
     def _write(self):
         if self._send_buffer:
-            logger.info("Sending", repr(self._send_buffer), "to", self.addr)
+            logger.info("Sending response to %s", self.addr)
+            logger.debug("Sending %s to %s", repr(self._send_buffer), self.addr)
             try:
                 # Should be ready to write
                 sent = self.sock.send(self._send_buffer)
@@ -147,7 +149,7 @@ class Message:
 
     def _create_response_json_content(self):
         content_encoding = "utf-8"
-        content = self.mission_controller.response
+        content = self.ev3_controller.response
         response = {
             "content_bytes": self._json_encode(content, content_encoding),
             "content_type": "text/json",
@@ -181,21 +183,21 @@ class Message:
         if self.request:
             if not self.response_created:
                 self.create_response()
-        self.create_response()
 
         self._write()
 
     def close(self):
-        logger.info("Closing connection to", self.addr)
+        logger.info("Closing connection to %s", self.addr)
+        print()
         try:
             self.selector.unregister(self.sock)
         except Exception as e:
-            logger.error("error: selector.unregister() exception for",f"{self.addr}: {repr(e)}")
+            logger.error("error: selector.unregister() exception for %s: %s", self.addr, repr(e))
 
         try:
             self.sock.close()
         except OSError as e:
-            logger.error("error: socket.close() exception for", f"{self.addr}: {repr(e)}",)
+            logger.error("error: socket.close() exception for %s: %s", self.addr, repr(e))
         finally:
             # Delete reference to socket object for garbage collection
             self.sock = None
@@ -203,7 +205,7 @@ class Message:
     def process_protoheader(self):
         hdrlen = 2
         if len(self._recv_buffer) >= hdrlen:
-            logger.debug("Processing proto header")
+            # logger.debug("Processing proto header")
             self._jsonheader_len = struct.unpack(
                 ">H", self._recv_buffer[:hdrlen]
             )[0]
@@ -212,7 +214,7 @@ class Message:
     def process_jsonheader(self):
         hdrlen = self._jsonheader_len
         if len(self._recv_buffer) >= hdrlen:
-            logger.debug("Processing JSON header")
+            # logger.debug("Processing JSON header")
             self.jsonheader = self._json_decode(
                 self._recv_buffer[:hdrlen], "utf-8"
             )
@@ -224,7 +226,7 @@ class Message:
                     "content-encoding",
             ):
                 if reqhdr not in self.jsonheader:
-                    raise ValueError(f'Missing required header "{reqhdr}".')
+                    logger.error("ValueError: Missing required header")
 
     def process_request(self):
         content_len = self.jsonheader["content-length"]
@@ -234,11 +236,12 @@ class Message:
         data = self._recv_buffer[:content_len]
         self._recv_buffer = self._recv_buffer[content_len:]
         if self.jsonheader["content-type"] == "text/json":
-            logger.debug("Processing JSON Content")
+            # logger.debug("Processing JSON Content")
             encoding = self.jsonheader["content-encoding"]
             self.request = self._json_decode(data, encoding)
-            logger.info("Received request", repr(self.request), "from", self.addr)
-            EV3Controller.process_request(self.mission_controller, self.request)
+            logger.info("Received request %s - %s from %s", repr(self.request.get("methode")),
+                        repr(self.request.get("parameter")), self.addr)
+            self.ev3_controller.process_request(self.request)
         else:
             # Binary or unknown content-type
             logging.error("Server only accepts JSON")

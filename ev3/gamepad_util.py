@@ -7,8 +7,13 @@ from ev3dev2.led import Leds
 
 # WARNING Triggers are not yet implemented
 
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(threadName)s %(name)s %(message)s")
+logger = logging.getLogger('')
+logger.setLevel(logging.INFO)
+
+
 class Gamepad:
-    logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger('GAMEPAD')
 
     # Constants
     _gamepad_xbox = 1
@@ -60,17 +65,16 @@ class Gamepad:
         Checks device list by reading content of virtual file "/proc/bus/input/devices"
         looking for gamepad device.
         """
-        global gamepad_type
         with open("/proc/bus/input/devices", "r") as fp:
             line = fp.readline()
             while line:
                 if self._enable_xbox_detection and line.startswith("N: Name=") and line.find("Xbox") > -1:
                     self._gamepad_type = self._gamepad_xbox
-                    logging.info("xBox gamepad detected")
+                    logger.info("xBox gamepad detected")
                 if self._enable_ps_detection and line.startswith("N: Name=") and line.find(
                         "PLAYSTATION") > -1 and line.find("Motion") == -1:
                     self._gamepad_type = self._gamepad_ps
-                    logging.info("PlayStation gamepad detected")
+                    logger.info("PlayStation gamepad detected")
                 if self._gamepad_type > 0 and line.startswith("H: Handlers="):
                     line = line[len("H: Handlers="):]
                     pb = line.find("event")
@@ -103,11 +107,11 @@ class Gamepad:
         leds.animate_police_lights('RED', 'GREEN', sleeptime=0.25, duration=None)
 
     def _reading_gamepad_inputs(self):
-        logging.info("Start reading inputs")
+        logger.info("Start reading inputs")
         try:
             infile_path = "/dev/input/" + self._gamepad_device
         except Exception:
-            logging.error("Detection error! Please make sure that a gamepad is connected to ev3")
+            logger.error("Detection error! Please make sure that a gamepad is connected to ev3")
             sleep(10)
             sys.exit(1)
 
@@ -172,38 +176,39 @@ class Gamepad:
         return self._checking_for_inputs
 
 
-class GamepadHandler:
-    connected_gamepad = None
+def limit_input_percentage(input_percentage, limit):
+    """
+    limit_input_percentage Checkt ob input_percentage limit ueberschreitet.
+    Wenn limit ueberschritten, wird input_percentage auf limit gesetzt und returnt.
 
-    logging.basicConfig(level=logging.DEBUG)
+    Args:
+        input_percentage (float): Percentage die gegen limit getestet werden soll
+        limit (float): Max percentage. Es wird immer mit dem Betrag des Limits gearbeitet.
+
+    Returns:
+        float: Limitierte percentage
+    """
+    if input_percentage > abs(limit):
+        return abs(limit)
+    elif input_percentage < (abs(limit) * -1):
+        return (abs(limit) * -1)
+    else:
+        return input_percentage
+
+
+class GamepadHandler:
+    logger = logging.getLogger('GAMEPAD HANDLER')
+
+    connected_gamepad = None
 
     def __init__(self, gamepad):
         # Declaring controller
         try:
             self.connected_gamepad = gamepad
         except Exception:
-            logging.error("Error while declaring the controller. Please check if controller is connected")
+            logger.error("Error while declaring the controller. Please check if controller is connected")
             sleep(10)
             sys.exit(1)
-
-    def limit_input_percentage(self, input_percentage, limit):
-        """
-        limit_input_percentage Checkt ob input_percentage limit ueberschreitet.
-        Wenn limit ueberschritten, wird input_percentage auf limit gesetzt und returnt.
-
-        Args:
-            input_percentage (float): Percentage die gegen limit getestet werden soll
-            limit (float): Max percentage. Es wird immer mit dem Betrag des Limits gearbeitet.
-
-        Returns:
-            float: Limitierte percentage
-        """
-        if input_percentage > abs(limit):
-            return abs(limit)
-        elif input_percentage < (abs(limit) * -1):
-            return (abs(limit) * -1)
-        else:
-            return input_percentage
 
     # TODO Test Handle onlick und handle stick mit neuen Treads
     def handle_onpress_events(self,
@@ -222,7 +227,7 @@ class GamepadHandler:
                               onpress_dpad_left=None,
                               onpress_dpad_right=None
                               ):
-        logging.info("Start handling inputs")
+        logger.info("Start handling inputs")
 
         def _thread_target():
             while self.connected_gamepad.checking_for_inputs:

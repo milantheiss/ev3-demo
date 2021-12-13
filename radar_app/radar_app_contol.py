@@ -15,22 +15,20 @@ logger.setLevel(logging.DEBUG)
 
 distanz_in_pxl = 0
 
-
-def start_radar_application():
-    global distanz_in_pxl
-    app = QApplication(sys.argv)
-    is_closed = False
-    window = Window(width=500, height=1000)
-    while True:
-        sleep(1000 / (60 * 1000))
-        app.processEvents()
-        window.update()
-        if window.is_closed:
-            break
-
-
 class RadarAppController:
     _distance_data = None
+
+    def start_radar_application(self):
+        global distanz_in_pxl
+        app = QApplication(sys.argv)
+        is_closed = False
+        window = Window(width=500, height=1000)
+        while True:
+            sleep(1000 / (60 * 1000))
+            app.processEvents()
+            window.update()
+            if window.is_closed:
+                break
 
     def __init__(self):
         self.radar_app_client = RadarAppClient(self)
@@ -38,22 +36,20 @@ class RadarAppController:
         input()
         self._distance_data_updated = False
         threading.Thread(target=self.start_requesting).start()
-        threading.Thread(target=start_radar_application).start()
-
-    def request_data(self):
-        self.radar_app_client.send_server_request("GET", "distance_data")
+        threading.Thread(target=self.start_radar_application).start()
 
     def start_requesting(self):
         while True:
+            logger.debug("Request")
             self._distance_data_updated = False
-            threading.Thread(target=self.request_data).start()
+            self.radar_app_client.send_server_request("GET", "distance_data")
             while self._distance_data_updated is False:
                 sleep(0.5)
 
     def process_response(self, response):
         global distanz_in_pxl
         if response.get("methode") == "RESPONSE":
-            if response.get("description") == "distance data":
+            if response.get("description") == "distance_data":
                 try:
                     distanz_in_pxl = int(response.get("value")) * 5
                 except ValueError:
