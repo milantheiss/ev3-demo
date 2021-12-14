@@ -44,5 +44,5 @@ Ebenfalls wird hier die IP-Adresse & der Port hinterlegt, auf den sich der Clien
 Es gibt jeweils eine settings.json Datei pro Gerät.  
 
 ---  
-Um den `drehen` Command genau benutzen zu können, muss die Rotation Ratio kalibriert und angepasst werden.  
+Um den `drehen` Command genau nutzen zu können, muss das Rotation Ratio kalibriert und angepasst werden.  
 Der Wert wird in der settings.json des EV3 gespeichert.
