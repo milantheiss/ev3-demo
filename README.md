@@ -33,7 +33,7 @@ Um die Scripte ausführen zu können, installiere die Dependencies aus `requirem
 Nutze `pip install -r requirements.txt`
 
 ---
-Um den Discord Bot starten zu können musst du dir einen eigenen Bot erstellen  
+Um den Discord Bot starten zu können, musst du dir einen eigenen Bot erstellen  
 und in einer .env Datei den Bot Token abzuspeichern.  
 Der Token muss in der .env Datei unter `DISCORD_TOKEN` abgespeichert werden 
 
