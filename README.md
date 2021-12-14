@@ -41,4 +41,8 @@ Der Token muss in der .env Datei unter `DISCORD_TOKEN` abgespeichert werden
 ---
 In settings.json musst du die IP-Adresse & den Port des Servers konfigurieren.  
 Ebenfalls wird hier die IP-Adresse & der Port hinterlegt, auf den sich der Client verbindet.  
-Es gibt jeweils eine settings.json Datei pro Gerät.
+Es gibt jeweils eine settings.json Datei pro Gerät.  
+
+---  
+Um den `drehen` Command genau benutzen zu können, muss die Rotation Ratio kalibriert und angepasst werden.  
+Der Wert wird in der settings.json des EV3 gespeichert.
