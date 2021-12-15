@@ -148,6 +148,8 @@ if __name__ == "__main__":
     @bot.command(name="vor")
     async def move_forwards(ctx, timeout=None, speed=None):
         global ev3_commands_active
+        timeout = int(timeout)
+        speed = int(speed)
         if not ev3_commands_active:
             await commands_blocked(ctx)
         elif timeout is None and timeout is None:
@@ -177,6 +179,8 @@ if __name__ == "__main__":
     @bot.command(name="zurück")
     async def move_backwards(ctx, timeout=None, speed=None):
         global ev3_commands_active
+        timeout = int(timeout)
+        speed = int(speed)
         if not ev3_commands_active:
             await commands_blocked(ctx)
         elif timeout is None and timeout is None:
