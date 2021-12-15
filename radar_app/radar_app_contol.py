@@ -15,6 +15,7 @@ logger.setLevel(logging.DEBUG)
 
 distanz_in_pxl = 0
 
+
 class RadarAppController:
     _distance_data = None
 
@@ -54,7 +55,7 @@ class RadarAppController:
                     distanz_in_pxl = int(response.get("value")) * 5
                 except ValueError:
                     logger.error("Error while casting response into int. Current value of distance data: %s",
-                                 distanz_in_pxl/5)
+                                 distanz_in_pxl / 5)
                 self._distance_data_updated = True
 
 
