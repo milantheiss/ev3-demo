@@ -20,7 +20,7 @@ Für die Server und Clients wurde Quellcode von [RealPython](https://realpython.
 ---
 ### Getting Started  
 Die einzelnen Unterordner gehören jeweils zu einem Gerät.  
-Nutze diese Befehle, um die Script auf dem Gerät im Terminal zu starten.  
+Nutze diese Befehle, um die Scripts auf dem Gerät im Terminal zu starten.  
 Für Windows:  
 `python *.py`  
 Für Linux:  
